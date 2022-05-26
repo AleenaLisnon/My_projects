@@ -1,0 +1,408 @@
+---
+title: |
+  | Final Project
+  | DS 807: Modeling Unstructured Data
+author: |
+  | Dagny Wilkins, Drew Rigney, Aleena Linson
+output: html_document
+---
+
+## Data Requirements:
+
+- You can pick any type of data that satisfies **at least one** of the following criteria:
+
+    1. Text Data
+    2. Image Data
+    3. Unsupervised Data
+
+
+- Some sources are:
+
+    - Kaggle <https://www.kaggle.com/datasets>
+    - UCI Machine Learning Repository <https://archive.ics.uci.edu/ml/index.php>
+   
+Required libraries 
+   
+```{r}
+library(dplyr)
+library(ggplot2)
+library(ggcorrplot)
+library(factoextra)
+library(cluster)
+library(mclust)
+library(keras)
+library(mlbench)
+library(psych)
+library(magrittr)
+library(neuralnet)
+```
+    
+- Read your data in R.
+
+```{r}
+mc=read.table("/Users/aleena/Desktop/MSBA/Ds807/project/marketing_campaign.csv",sep=",",header=TRUE)
+head(mc)
+attach(mc)
+```
+
+In this section, the team is removing unwanted columns and adding in additional columns. One of the features was the date that a person became a customer. In order to still include this categorical variable, the team calculated the number of days they've been a customer and added a new feature called Customer_For. Another column was added called Age to replace the categorical year of birth, so now we have information about the customers' ages. The team also added a column that calculates how many campaigns the customer accepted. This somewhat captures the five categorical features listing whether a customer accepted or not for the various campaigns.
+
+The columns that won't be used in this analysis include: ID, Year_Birth, Education, Marital Status, Dt_Customer, AcceptedCmp1, AcceptedCmp2, AcceptedCmp3, AcceptedCmp4, AcceptedCmp5, Complain, Z_CostContract, Z_Revenue, Current_Date, and Response. These columns were either categorical, transformed into numerical format and no longer needed, or weren't included in the data dictionary and left out for lack of understanding.
+
+After these steps were taken, there are now 18 features in this data set instead of 29.
+
+```{r}
+class(mc$Dt_Customer)
+
+mc = mc%>%
+  mutate(Dt_Customer = as.Date(Dt_Customer, format = "%m/%d/%Y"))
+
+class(mc$Dt_Customer)
+
+mc$Current_Date = Sys.Date()
+
+mc = mc%>%
+   mutate(mc$Current_Date, format = "%m/%d/%Y")
+
+mc$Customer_For = as.numeric(mc$Current_Date - mc$Dt_Customer)
+mc$Customer_For
+
+mc$Accepted_Campaigns = AcceptedCmp1+AcceptedCmp2+AcceptedCmp3+AcceptedCmp4+AcceptedCmp5
+mc$Accepted_Campaigns
+
+head(mc)
+
+marketing=mc[,-c(1,2,3,4,8,21,22,23,24,25,26,27,28,29,31,32,33)]
+head(marketing)
+```
+
+## The grading rubric can be found below:
+
++----------------+---------------+--------------------+-----------------------+
+|                | R code        | Decision/Why       | Communication         |
+|                |               |                    |  of findings          |
++================+===============+====================+=======================+
+| Percentage of  | 30%           | 35%                | 35%                   |
+| Assigned Points|               |                    |                       |
++----------------+---------------+--------------------+-----------------------+
+
+
+- **Decision/why?**: Explain your reasoning behind your choice of the procedure, set of variables and such for the question. 
+
+    - Explain why you use the procedure/model/variables
+    - To exceed this criterion, describe steps taken to implement the procedure in a non technical way.
+
+
+- **Communication of your findings**: Explain your results.
+
+    - Explain why you think one model is better than the other.
+    - To exceed this criterion, explain your model in a non technical way.
+
+## Note
+
+- Since there is a great range of potential data, the instructions are written in a general way. If some steps do not make sense in your case, please reach out to verify.
+
+## Part 1: Exploratory Data Analysis (20 points)
+
+1. Explain the purpose of the analysis *for your data*, i.e., what are you trying to achieve?
+
+The purpose of this analysis is to perform clustering in order to understand and summarize customer segments. This will help with marketing efforts.
+
+2. Check for existence of NA's (missing data)
+
+There are 24 null values present in the Income column. Those rows will be excluded from the analysis since it is a small number of null values. 
+
+```{r}
+colSums(is.na(marketing))
+names(which(colSums(is.na(marketing))>0))
+marketing=na.omit(marketing)
+```
+
+3. Use appropriate plots for EDA, i.e., word counts for text data.
+
+Box plots were generated for a handful of variables to visually see the distribution. Extreme outliers were removed from the Age and Income features; there were 4 of them. 3 people were older than 100, and one person had an extremely high salary. In the age variable, there were some impossible values. After removing outliers and missing values, there are now 2,212 rows of data.
+
+Based on the bar charts created for the categorical variables, it appears that the majority of people purchase their products in store or online as these types of purchases had a median count of about five while catalog purchases were only at about one. The number of people buying things on a discount is also fairly low with a median of about two purchases per person. However, there were a few outliers indicating that some individuals are heavy discount buyers. 
+
+It is also interesting to note that the median number of web purchases is equivalent to the median number of web visits per month. This may indicate that those who go online to search for a product are very likely to purchase the product. The company may want to explore improving their online marketing to get more web traffic which may result in more sales. The median number of catalog purchases of one is also far lower than the median of store and web sales of five. This may indicate that consumers no longer want to purchase via catalogs, and the company may want to consider removing this from their business plan. 
+
+From a demographic perspective, the majority of customers in this data set are generally older with a median age just over 50 with most having some level of higher education many of which being PHD's. This is also a fairly wealthy data set as the median income seems to be near $100,000. Most people in this data set are also married, but most do not have any children at home. Overall, the customers in this data set have not been receptive to accepting marketing campaigns so far, so the company will greatly benefit from improved clustering to better understand how to market their products to their consumers.
+
+```{r}
+summary(marketing)
+marketing_cor=cor(marketing)
+ggcorrplot(marketing_cor)
+
+ggplot(data = marketing, aes(x = "", y = Age)) + 
+  geom_boxplot()
+
+ggplot(data = marketing, aes(x = "", y = Income)) + 
+  geom_boxplot()
+
+#removing age and income outliers
+marketing<-marketing[!(marketing$Age>100 | marketing$Income>600000),]
+#median is close to 3000 days with a max of about 3900 and minimum of 2700. No new customers
+
+#double checking that age and income outliers were removed
+head(marketing)
+dim(marketing)
+
+#Boxplots for other numerical variables
+ggplot(data = marketing, aes(x = "", y = NumWebVisitsMonth)) + 
+  geom_boxplot()#Median just over 5, a few outliers near 20
+
+ggplot(data = marketing, aes(x = "", y = NumWebPurchases)) + 
+  geom_boxplot() #Median less than 5, few outliers above 20
+
+ggplot(data = marketing, aes(x = "", y = NumStorePurchases)) + 
+  geom_boxplot() #median is 5 with no outliers
+
+ggplot(data = marketing, aes(x = "", y = NumDealsPurchases)) + 
+  geom_boxplot() #median is about 2 with lots of outliers
+
+ggplot(data = marketing, aes(x = "", y = NumCatalogPurchases)) + 
+  geom_boxplot() #median is about 1 with a few of outliers
+
+ggplot(data = marketing, aes(x = "", y = Kidhome)) + 
+  geom_boxplot()# the maximum number of kids in a household in this dataset is 2 with a majority having 0
+
+ggplot(data = marketing, aes(x = "", y = Teenhome)) + 
+  geom_boxplot()# the maximum number of teenagers in a household in this dataset is 2 with a majority having 0
+
+ggplot(data = mc, aes(x = "", y = Recency)) + 
+  geom_boxplot() #the median number of days since last transaction is about 50 with a maximum of close to 100. Fairly large spread ranging from 0 to 100, no outliers
+
+ggplot(data = mc, aes(x = "", y = MntWines)) + 
+  geom_boxplot()
+
+ggplot(data = mc, aes(x = "", y = MntFruits)) + 
+  geom_boxplot() #lots of outliers
+
+ggplot(data = mc, aes(x = "", y = MntMeatProducts)) + 
+  geom_boxplot() #lots of outliers
+
+ggplot(data = mc, aes(x = "", y = MntFishProducts)) + 
+  geom_boxplot() #lots of outliers
+
+ggplot(data = mc, aes(x = "", y = MntSweetProducts)) + 
+  geom_boxplot() #lots of outliers
+
+ggplot(data = mc, aes(x = "", y = Customer_For)) + 
+  geom_boxplot() #lots of outliers
+
+#Bar charts for categorical data
+ggplot(data = mc, aes( x = Education)) + 
+  geom_bar() #most graduation or PHD
+
+ggplot(data = mc, aes( x = Marital_Status)) + 
+  geom_bar() #vast majority are married
+
+ggplot(data = marketing, aes(x = Accepted_Campaigns)) + 
+  geom_bar() #most have not accepted any
+```
+
+4. Do you need to scale your data or do you need dimension reduction? If so, perform a principle components analysis on a scaled, or not-scaled data depending on your needs.
+
+Scaling the data was necessary since the variables had a wide range of scales, and the team will be using distance based algorithms. This will ensure that all the features contribute equally to the result and that the larger numbers (ie Income) aren't overpowering. Additionally, we also need dimension reduction. There seems to be some strong to moderate correlations between some of the variables, so conducting a principle components analysis on scaled data will help alleviate all of these concerns. For this analysis, 10 principle components is sufficient since it accounts for about 85% of the variation. This reduced the number of features needed in this analysis by eight. The dimension reduction was successful. 
+
+```{r}
+marketing.pca = prcomp(marketing, scale=TRUE, center=TRUE)
+
+summary(marketing.pca)
+```
+
+
+## Part 2: Clustering (20 points)
+
+1. Develop a clustering algorithm for your data: Choose from topic models, k-means, k-medoids, hierarchical, or DBSCAN. 
+
+```{r}
+hclust.comp = hclust(dist(marketing.pca$x[,1:10]), method="complete")
+hclust.comp
+summary(hclust.comp)
+plot(hclust.comp)
+
+fviz_nbclust(marketing.pca$x[,1:10], FUN = hcut, method = "silhouette")
+fviz_nbclust(marketing.pca$x[,1:10], FUN = hcut, method = "wss")
+
+cut.out2 = cutree(hclust.comp, k=2)
+table(cut.out2)
+
+cut.out4 = cutree(hclust.comp, k=4)
+table(cut.out4)
+```
+
+The team also wanted to test the Divisive Clustering Algorithm since it works well with consumer behavior segments.
+
+```{r}
+h_diana=diana(marketing.pca$x[,1:10], metric="manhattan")
+pltree(h_diana, cex = 0.6, main = "Dendrogram of divisive clustering")
+
+# Cut tree into 4 groups
+diana_clusters <- cutree(h_diana, k = 4)
+
+# Number of members in each cluster
+table(diana_clusters)
+```
+
+
+2. Explain your choices on model parameters, i.e. k, eps, minpts, and communicate your results.
+
+Using the hierarchical clustering algorithm, the optimal number of clusters is two. This was determined using both the silhouette method and the weighted sum of squares method. However, if two clusters are selected, the distribution of observations among clusters is disproportionate. The second cluster only has a handful of observations. This is most likely due to outliers in the data set. The algorithm recognizes those few observations as very different from the rest. This is not a very realistic set of clusters because the algorithm is essentially saying that there is one cluster. The team decided to increase the number of clusters to four for a better distribution among the clusters. This provides a more even, realistic distribution. This means that there are four distinct customer segments present in this data set. At this point, the team can apply labels to the data set and perform an EDA on the different clusters. This will allow the marketing team to understand the consumers better in order to more effectively advertise. It would also be interesting to remove all outliers from the data set to see how it impacts the clusters. 
+
+## Part 3: Mixture Models (20 points)
+
+1. Apply a mixture model based clustering to your data.
+
+```{r}
+#four clusters
+marketing_clust4=Mclust(marketing.pca$x[,1:10],4)
+summary(marketing_clust4)
+
+#optimal number of clusters: nine
+marketing_clust=Mclust(marketing.pca$x[,1:10])
+summary(marketing_clust)
+plot(marketing_clust, what = "classification")
+```
+
+2. Explain your choices on model parameters, and communicate your results.
+
+In this case, the team used the Mclust algorithm as it is more effective at clustering data when compared to flexmix. The team tried it with four clusters since we used that number of clusters with the previous method. We also allowed the algorithm to find the optimal number of clusters. The algorithm determined that there were nine clusters present in the data set; this version has a higher BIC which means it performs worse. The team also tested three and five clusters, but four clusters performed the best in terms of BIC. It is interesting that the algorithm's optimal number of clusters had a worse BIC. The team is more confident now that there are four customer segments present in this data set. 
+
+
+## Part 4: Deep Learning (20 points)
+
+1. Apply a type of neural network algorithm to your data.
+
+We decided to do FFNN since we are doing a classification analysis. 
+
+Reading in packages
+
+
+install_keras()
+install_tensorflow(
+  method = c("auto", "virtualenv", "conda"),
+  conda = "auto",
+  version = "default",
+  envname = NULL,
+  extra_packages = NULL,
+  restart_session = TRUE,
+  conda_python_version = NULL,
+  pip_ignore_installed = TRUE,
+  python_version = conda_python_version
+)
+
+
+Setting up data set for deep learning
+
+Test/train data 
+
+```{r}
+#data split
+
+set.seed(123)
+ind <- sample(2, nrow(marketing), replace = T, prob = c(.7, .3))
+training <- marketing[ind==1,1:17]
+test <- marketing[ind==2, 1:17]
+trainingtarget <- marketing[ind==1, 18]
+testtarget <- marketing[ind==2, 18]
+str(trainingtarget)
+
+
+
+str(testtarget)
+head(training)
+head(trainingtarget)
+head(testtarget)
+```
+
+Normalize data
+
+```{r}
+m <- colMeans(training)
+s <- apply(training, 2, sd)
+training <- scale(training, center = m, scale = s)
+test <- scale(test, center = m, scale = s)
+```
+
+Define model
+
+```{r}
+model <- keras_model_sequential()
+model %>%
+  layer_dense(units = 17^2, activation = 'relu', input_shape = c(17)) %>%
+  layer_dense(units = 20, activation = 'relu') %>%
+  layer_dense(units = 10, activation = 'relu') %>%
+  layer_dense(units = 5, activation = 'softmax')
+```
+
+Compile model
+
+```{r}
+model %>% compile(loss = 'sparse_categorical_crossentropy',
+optimizer = 'adam', 
+metrics = 'accuracy') 
+model
+```
+
+Validate model
+
+```{r}
+set.seed(1)
+model1 <- model %>% 
+  fit(training,trainingtarget,
+             epochs = 20,
+             batch_size = 32,
+             validation_split = 0.2)
+model %>% 
+  evaluate(test, testtarget)
+```
+
+Hyperparameter tuning
+
+```{r}
+set.seed(1)
+library(tfruns)
+runs <- tuning_run("hypertunning.R", flags = list(dense_units1=c(30, 128, 150)))
+```
+
+Checking model metrics after tuning
+
+```{r}
+set.seed(1)
+runs %>% 
+  filter(metric_val_accuracy == min(metric_val_accuracy)) %>% 
+  glimpse()
+```
+
+
+
+2. Explain your choices on model parameters, and communicate your results.
+
+We chose to run a FFNN since the team decided to perform a multiclass classification and felt that this was the most appropriate method for this type of problem. We used activation 'relu' for hidden layers as it's the most common option and used activation 'softmax' for the output layer as this is a multiclass classification problem. The loss funtion is sparecategorical_crossentropy and used accuracy as the metric. After running the model, it returned an accuracy of 0.81 and a  loss of 0.67. This accuracy measure is very impressive for a multiclass problem. This means that 81% of the cases were correctly classified. The model correctly predicted (81% of the time) how many campaigns a customer would accept. If there were more data points, it would have performed better. It still performed significantly better than a normal multiclass problem would have. With more data, the model has more information to learn and improve from. A lower loss is better, and this was the minimal possible loss with this problem. The hyperparameter tuning improved the model as expected. The accuracy increased by roughly 0.72% to 81.72% and the loss decreased significantly to 0.48. The team prefers the hyperparameter tuned model since it preformed better and was more accurate in classifying the observations.  
+
+
+## Part 5: Conclusion (20 points)
+
+1. (10 points) Based on the purpose of your analysis stated in Part 1, which analysis did a good/better/satisfactory job? How do you think you can improve the analysis?
+
+  The purpose of the clustering analysis was to help the company better segment their customers into distinct groups which will allow the company to market more effectively. All the clustering methods were satisfactory. Both methods pointed to four clusters. It would be interesting to apply labels to both methods and see how similar the clusters are. If we had more time, the team would have loved to take a closer look at the demographics that made up the clusters since this would provide valuable insight to the company. 
+  
+  For the neural network, it was helpful to classify customers based on how many marketing campaigns they may accept. This will also help with marketing efforts. Based on certain features in the data set, they may be able to determine which customers to target if there are similarities among the groups of people who accept different number of campaigns. Additionally, it may be worth switching their marketing strategy to the groups of people who typically ignore campaigns. Given that the neural network is more of a slow learner, more data would have improved the model performance. Even though this data set isn't that large, it still performs better than a normal multiclass classification problem would have. 
+  
+  Overall, this analysis is really just a starting point for the company. It would likely be most beneficial for the company to take these classifications and clusters made by the models and use them to label their data set, so that when a new customer is added to the database they can correctly classify/cluster them into the correct market segment. The company's marketing team can also look at the segmentation made by the neural network and gain insights about which groups of customers are most similar in their purchasing habits/campaign acceptances and understand which marketing strategies would be most effective for each group of customers which would ultimately boost revenues.  
+
+    
+2. (10 points) What are your learning outcomes for this assignment? Please focus on your learning outcomes in terms of analysis, model interpretations, and R skills - it is up to you to include this part in your presentation or not.
+
+- How to fit a FFNN and perform deep learning classification
+- How to choose most appropriate clustering algorithms and explain the choice to a technical audience
+- How to handle uneven cluster groups and determine best number of clusters based on BIC and different measures such as silhoutte and wss
+- How to use Exploratory Data Analysis to inform the rest of the analysis
+- How to think outside the box to still incorporate categorical variables in an effective manner (feature transformation of age and # of days as a customer)
+
+
+
+
+
+
